@@ -88,7 +88,7 @@ app.get('/', (req, res) => {
 // =================================================================
 app.listen(PORT, () => {
   console.log(`\n🚀 SERVER STARTED ---------------------------`);
-  console.log(`✅ Backend running at: http://127.0.0.1:${PORT}`);
+  console.log(`✅ Backend running at: http://0.0.0.0:${PORT}`);
   console.log(`📂 Serving images from: ${path.join(__dirname, 'uploads')}`);
   console.log(`---------------------------------------------\n`);
 });
