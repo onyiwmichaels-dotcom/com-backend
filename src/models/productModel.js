@@ -1,6 +1,9 @@
-const db = require('../config/database');
+import pool from '../config/db.js';
 
 const Product = {
+  // =====================================================
+  // GET ALL PRODUCTS (SHOP + ADMIN)
+  // =====================================================
   getAll: (filters = {}, callback) => {
     try {
       let sql = "SELECT * FROM products";
@@ -8,82 +11,166 @@ const Product = {
       const params = [];
 
       if (filters.type) {
-        conditions.push("type = ?");
         params.push(String(filters.type).toLowerCase());
+        conditions.push(`type = $${params.length}`);
       }
+
       if (filters.category) {
-        conditions.push("category = ?");
         params.push(filters.category);
+        conditions.push(`category = $${params.length}`);
       }
+
       if (filters.search) {
-        conditions.push("(name LIKE ? OR description LIKE ?)");
-        params.push(`%${filters.search}%`, `%${filters.search}%`);
+        params.push(`%${filters.search}%`);
+        params.push(`%${filters.search}%`);
+        conditions.push(
+          `(name ILIKE $${params.length - 1} OR description ILIKE $${params.length})`
+        );
       }
+
       if (filters.status && filters.status !== 'all') {
-        conditions.push("status = ?");
         params.push(filters.status);
+        conditions.push(`status = $${params.length}`);
       } else if (!filters.status) {
-        conditions.push("status = ?");
-        params.push("approved");
+        params.push('approved');
+        conditions.push(`status = $${params.length}`);
       }
 
       if (conditions.length) {
         sql += " WHERE " + conditions.join(" AND ");
       }
+
       sql += " ORDER BY id DESC";
-      db.all(sql, params, callback);
-    } catch (syncError) {
-      return callback(syncError);
+
+      pool.query(sql, params, (err, result) => {
+        if (err) return callback(err);
+        callback(null, result.rows);
+      });
+    } catch (error) {
+      callback(error);
     }
   },
 
+  // =====================================================
+  // CREATE PRODUCT
+  // =====================================================
   create: (product, callback) => {
-    const { name, price, description, image, type, category, status, sellerPhone } = product;
+    const {
+      name,
+      price,
+      description = '',
+      image = '',
+      type = 'new',
+      category = '',
+      status = 'pending',
+      sellerPhone = 'Admin'
+    } = product;
+
     const sql = `
-      INSERT INTO products 
+      INSERT INTO products
       (name, price, description, image, type, category, status, sellerPhone)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id;
     `;
-    const params = [name, price, description || '', image || '', type || 'new', category || '', status || 'pending', sellerPhone || 'Admin'];
-    db.run(sql, params, function (err) {
+
+    const params = [
+      name,
+      price,
+      description,
+      image,
+      type,
+      category,
+      status,
+      sellerPhone
+    ];
+
+    pool.query(sql, params, (err, result) => {
       if (err) return callback(err);
-      callback(null, { id: this.lastID });
+      callback(null, { id: result.rows[0].id });
     });
   },
 
-  // FIX: Explicitly handle callback to avoid "not a function" error
+  // =====================================================
+  // UPDATE PRODUCT
+  // =====================================================
   update: (id, updatedData, callback) => {
-    const allowedColumns = ['name', 'price', 'description', 'image', 'type', 'category', 'status', 'sellerPhone'];
-    const fieldsToUpdate = Object.keys(updatedData).filter(key => allowedColumns.includes(key));
-    
-    if (fieldsToUpdate.length === 0) return callback(new Error("No valid fields to update"));
+    const allowedColumns = [
+      'name',
+      'price',
+      'description',
+      'image',
+      'type',
+      'category',
+      'status',
+      'sellerPhone'
+    ];
 
-    const setClause = fieldsToUpdate.map(field => `${field} = ?`).join(', ');
-    const params = fieldsToUpdate.map(field => updatedData[field]);
-    
-    const sql = `UPDATE products SET ${setClause} WHERE id = ?`;
+    const fields = Object.keys(updatedData).filter(key =>
+      allowedColumns.includes(key)
+    );
+
+    if (fields.length === 0) {
+      return callback(new Error("No valid fields to update"));
+    }
+
+    const setClause = fields
+      .map((field, index) => `${field} = $${index + 1}`)
+      .join(', ');
+
+    const params = fields.map(field => updatedData[field]);
     params.push(id);
 
-    db.run(sql, params, (err) => {
-        if (callback) callback(err);
+    const sql = `UPDATE products SET ${setClause} WHERE id = $${params.length}`;
+
+    pool.query(sql, params, (err) => {
+      if (callback) callback(err);
     });
   },
 
-  // FIX: Renamed 'remove' to 'delete' to match your adminController
+  // =====================================================
+  // DELETE PRODUCT
+  // =====================================================
   delete: (id, callback) => {
-    db.run("DELETE FROM products WHERE id = ?", [id], (err) => {
+    pool.query(
+      "DELETE FROM products WHERE id = $1",
+      [id],
+      (err) => {
         if (callback) callback(err);
-    });
+      }
+    );
   },
 
+  // =====================================================
+  // GET PRODUCT BY ID
+  // =====================================================
   getById: (id, callback) => {
-    db.get("SELECT * FROM products WHERE id = ?", [id], callback);
+    pool.query(
+      "SELECT * FROM products WHERE id = $1",
+      [id],
+      (err, result) => {
+        if (err) return callback(err);
+        callback(null, result.rows[0]);
+      }
+    );
   },
 
+  // =====================================================
+  // GET LATEST PRODUCTS (HOME PAGE)
+  // =====================================================
   getLatest: (callback) => {
-    const sql = `SELECT id, name, price, image FROM products WHERE status = 'approved' ORDER BY id DESC LIMIT 4`;
-    db.all(sql, [], callback);
+    const sql = `
+      SELECT id, name, price, image
+      FROM products
+      WHERE status = 'approved'
+      ORDER BY id DESC
+      LIMIT 4
+    `;
+
+    pool.query(sql, [], (err, result) => {
+      if (err) return callback(err);
+      callback(null, result.rows);
+    });
   }
 };
 
-module.exports = Product;
+export default Product;

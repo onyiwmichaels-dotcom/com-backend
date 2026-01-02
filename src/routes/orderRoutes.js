@@ -1,11 +1,15 @@
-const express = require('express');
+import express from "express";
+import {
+  createOrder,
+  getOrders
+} from "../controllers/orderController.js";
+
 const router = express.Router();
-const { createOrder, getOrders } = require('../controllers/orderController');
 
 // Route to place a new order
-router.post('/', createOrder);
+router.post("/", createOrder);
 
 // Route to get all orders (for admin)
-router.get('/', getOrders);
+router.get("/", getOrders);
 
-module.exports = router;
+export default router;

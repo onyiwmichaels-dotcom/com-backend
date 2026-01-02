@@ -1,158 +1,190 @@
-const Product = require('../models/productModel');
-const db = require('../config/database');
-const path = require('path');
+import pool from "../config/db.js";
+import path from "path";
 
 // ==========================================================
-// 1. PRODUCT CRUD HANDLERS
+// 1. PRODUCT CRUD HANDLERS (ADMIN)
 // ==========================================================
 
-// GET products (Used by Admin Dashboard for product list)
-const getProducts = (req, res) => {
-    // 🛑 CRITICAL FIX: Explicitly set the status filter to 'all' for the Admin view.
-    // This overrides the 'approved' default in productModel.js, ensuring
-    // pending products are returned to populate the Submission Inbox tab.
-    const filters = { ...req.query, status: 'all' };
-    
-    Product.getAll(filters, (err, rows) => {
-        if (err) {
-            console.error("❌ Admin Get Products Error:", err.message);
-            return res.status(500).json({ message: err.message });
-        }
-        res.json(rows);
-    });
+// GET products (Admin dashboard – includes ALL statuses)
+export const getProducts = async (req, res) => {
+  try {
+    let query = `SELECT * FROM products ORDER BY created_at DESC`;
+    const { rows } = await pool.query(query);
+    res.json(rows);
+  } catch (err) {
+    console.error("❌ Admin Get Products Error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
 };
 
-// POST Add Product (ADMIN UPLOAD - AUTO APPROVED)
-const addProduct = (req, res) => {
-    const { name, price, description, image, type, category, sellerPhone, location } = req.body;
-    
-    // Validation
+// POST Add Product (ADMIN UPLOAD – AUTO APPROVED)
+export const addProduct = async (req, res) => {
+  try {
+    const {
+      name,
+      price,
+      description,
+      image,
+      type,
+      category,
+      sellerPhone,
+      location
+    } = req.body;
+
     if (!name || !price || !image || !sellerPhone) {
-        return res.status(400).json({ message: "Name, price, image URL, and seller phone number are required." });
+      return res.status(400).json({
+        message: "Name, price, image URL, and seller phone number are required."
+      });
     }
 
-    // 🛑 KEY FIX: We verify that 'status' is set to 'approved' for Admin uploads
-    Product.create({ 
-        name, 
-        price, 
-        description, 
-        image, 
-        type, 
-        category, 
-        sellerPhone, 
-        location,
-        status: 'approved' // ✅ FORCE APPROVED STATUS (Live immediately)
-    }, function(err) {
-        if (err) {
-            console.error("❌ Database Insert Error:", err.message);
-            return res.status(500).json({ message: err.message });
-        }
-        
-        res.status(201).json({ message: "Product added and is live!", id: this.lastID });
+    const query = `
+      INSERT INTO products
+      (name, price, description, image, type, category, sellerPhone, location, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'approved')
+      RETURNING id
+    `;
+
+    const values = [
+      name,
+      price,
+      description,
+      image,
+      type,
+      category,
+      sellerPhone,
+      location
+    ];
+
+    const { rows } = await pool.query(query, values);
+
+    res.status(201).json({
+      message: "Product added and is live!",
+      id: rows[0].id
     });
+  } catch (err) {
+    console.error("❌ Admin Insert Error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // PUT Update Product
-const updateProduct = (req, res) => {
+export const updateProduct = async (req, res) => {
+  try {
     const id = req.params.id;
-    const { name, price, description, image, type, category, sellerPhone, location } = req.body;
-    
+    const {
+      name,
+      price,
+      description,
+      image,
+      type,
+      category,
+      sellerPhone,
+      location
+    } = req.body;
+
     if (!id || !name || !price || !sellerPhone) {
-        return res.status(400).json({ message: "ID, name, price, and seller phone required" });
+      return res.status(400).json({
+        message: "ID, name, price, and seller phone required"
+      });
     }
 
-    Product.update({ id, name, price, description, image, type, category, sellerPhone, location }, (err) => {
-        if (err) {
-            console.error("❌ Database Update Error:", err.message);
-            return res.status(500).json({ message: err.message });
-        }
-        res.json({ message: "Updated" });
-    });
+    const query = `
+      UPDATE products SET
+      name=$1, price=$2, description=$3, image=$4,
+      type=$5, category=$6, sellerPhone=$7, location=$8
+      WHERE id=$9
+    `;
+
+    await pool.query(query, [
+      name,
+      price,
+      description,
+      image,
+      type,
+      category,
+      sellerPhone,
+      location,
+      id
+    ]);
+
+    res.json({ message: "Updated" });
+  } catch (err) {
+    console.error("❌ Admin Update Error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // DELETE Product
-const deleteProduct = (req, res) => {
+export const deleteProduct = async (req, res) => {
+  try {
     const id = req.params.id;
-    
     if (!id) return res.status(400).json({ message: "ID required" });
-    
-    Product.delete(id, (err) => {
-        if (err) return res.status(500).json({ message: err.message });
-        res.status(204).send();
-    });
+
+    await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // ==========================================================
-// 2. IMAGE UPLOAD HANDLER
+// 2. IMAGE UPLOAD HANDLER (UNCHANGED)
 // ==========================================================
 
-const uploadImage = (req, res) => {
-    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-    const filePath = `/uploads/${req.file.filename}`;
-    res.json({ filePath });
+export const uploadImage = (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+  const filePath = `/uploads/${req.file.filename}`;
+  res.json({ filePath });
 };
 
 // ==========================================================
 // 3. ORDER HANDLERS
 // ==========================================================
 
-const getOrders = (req, res) => {
-    db.all("SELECT o.*, p.name AS productName, p.price AS productPrice FROM orders o LEFT JOIN products p ON o.productId = p.id ORDER BY o.date DESC", [], (err, rows) => {
-        if (err) {
-            console.error("SQL Error in getOrders:", err.message);
-            return res.status(500).json({ message: err.message });
-        }
-        res.json(rows);
-    });
+export const getOrders = async (req, res) => {
+  try {
+    const query = `
+      SELECT o.*, p.name AS productName, p.price AS productPrice
+      FROM orders o
+      LEFT JOIN products p ON o.productId = p.id
+      ORDER BY o.date DESC
+    `;
+    const { rows } = await pool.query(query);
+    res.json(rows);
+  } catch (err) {
+    console.error("❌ Orders Fetch Error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // ==========================================================
-// 4. ADMIN DASHBOARD STATS HANDLER (FIXED)
+// 4. ADMIN DASHBOARD STATS
 // ==========================================================
 
-const getAdminStats = (req, res) => {
-    // 1. Get Total Orders Count
-    db.get("SELECT COUNT(id) AS totalOrders FROM orders", (err1, orderRow) => {
-        if (err1) {
-            console.error("❌ Stats Error: Total Orders:", err1.message);
-            return res.status(500).json({ message: "Error fetching orders count: " + err1.message });
-        }
+export const getAdminStats = async (req, res) => {
+  try {
+    const totalOrders = await pool.query(
+      `SELECT COUNT(id) FROM orders`
+    );
 
-        // 2. Get Pending Requests Count (Using robust LOWER() comparison)
-        db.get("SELECT COUNT(id) AS pendingRequests FROM products WHERE LOWER(status) = 'pending'", (err2, pendingRow) => {
-            if (err2) {
-                console.error("❌ Stats Error: Pending Requests:", err2.message);
-                return res.status(500).json({ message: "Error fetching pending count: " + err2.message });
-            }
+    const pendingRequests = await pool.query(
+      `SELECT COUNT(id) FROM products WHERE status='pending'`
+    );
 
-            // 3. Get Active Inventory Count (Status = Approved)
-            db.get("SELECT COUNT(id) AS activeInventory FROM products WHERE LOWER(status) = 'approved'", (err3, activeRow) => {
-                if (err3) {
-                    console.error("❌ Stats Error: Active Inventory:", err3.message);
-                    return res.status(500).json({ message: "Error fetching active inventory count: " + err3.message });
-                }
+    const activeInventory = await pool.query(
+      `SELECT COUNT(id) FROM products WHERE status='approved'`
+    );
 
-                const stats = {
-                    totalOrders: orderRow ? orderRow.totalOrders : 0,
-                    activeInventory: activeRow ? activeRow.activeInventory : 0,
-                    pendingRequests: pendingRow ? pendingRow.pendingRequests : 0
-                };
-                
-                // 🕵️ FINAL DEBUG LOG: Check this in your terminal when you load the dashboard!
-                console.log("📈 [Admin Stats] Final Dashboard Data:", stats); 
+    const stats = {
+      totalOrders: totalOrders.rows[0].count,
+      pendingRequests: pendingRequests.rows[0].count,
+      activeInventory: activeInventory.rows[0].count
+    };
 
-                res.json(stats);
-            });
-        });
-    });
-};
-
-module.exports = {
-    getProducts,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    uploadImage,
-    getOrders,
-    getAdminStats
+    console.log("📈 [Admin Stats]", stats);
+    res.json(stats);
+  } catch (err) {
+    console.error("❌ Admin Stats Error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
 };

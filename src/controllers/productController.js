@@ -1,82 +1,127 @@
-const Product = require('../models/productModel'); 
+import pool from "../config/db.js";
 
-// Fetch products for the shop
-const listProducts = (req, res) => {
-  const filters = {
-    type: req.query.type,
-    category: req.query.category,
-    search: req.query.search,
-    status: req.query.status // Admin can send ?status=pending
-  };
+/**
+ * GET /api/products
+ * Public shop listing with filters
+ */
+export const listProducts = async (req, res) => {
+  try {
+    const { type, category, search, status } = req.query;
 
-  Product.getAll(filters, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+    let query = `SELECT * FROM products WHERE 1=1`;
+    const values = [];
+
+    if (status) {
+      values.push(status);
+      query += ` AND status = $${values.length}`;
+    } else {
+      values.push("approved");
+      query += ` AND status = $${values.length}`;
+    }
+
+    if (type) {
+      values.push(type);
+      query += ` AND type = $${values.length}`;
+    }
+
+    if (category) {
+      values.push(category);
+      query += ` AND category = $${values.length}`;
+    }
+
+    if (search) {
+      values.push(`%${search}%`);
+      query += ` AND name ILIKE $${values.length}`;
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const { rows } = await pool.query(query, values);
     res.json(rows);
-  });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 };
 
-// Handle uploads from both Admin and Public
-const submitProduct = (req, res) => {
-  const { name, price, description, image, type, category, sellerPhone, isAdmin } = req.body;
+/**
+ * POST /api/products
+ * Submit new product
+ */
+export const submitProduct = async (req, res) => {
+  try {
+    const {
+      name,
+      price,
+      description,
+      image,
+      type,
+      category,
+      sellerPhone,
+      isAdmin
+    } = req.body;
 
-  if (!name || !price || !image) {
-    return res.status(400).json({ message: "Missing required fields" });
-  }
+    if (!name || !price || !image) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
 
-  const newProduct = {
-    name,
-    price,
-    description,
-    image,
-    type,
-    category,
-    sellerPhone,
-    // If the request comes from Admin Dashboard, it's approved immediately!
-    status: isAdmin ? 'approved' : 'pending' 
-  };
+    const status = isAdmin ? "approved" : "pending";
 
-  Product.create(newProduct, (err, result) => {
-    if (err) return res.status(500).json({ message: err.message });
+    const query = `
+      INSERT INTO products
+      (name, price, description, image, type, category, sellerPhone, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      RETURNING id
+    `;
+
+    const values = [
+      name,
+      price,
+      description,
+      image,
+      type,
+      category,
+      sellerPhone,
+      status
+    ];
+
+    const { rows } = await pool.query(query, values);
+
     res.status(201).json({
       message: isAdmin ? "Product live!" : "Submitted for approval",
-      id: result.id
+      id: rows[0].id
     });
-  });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
 };
 
-const getProduct = (req, res) => {
-  Product.getById(req.params.id, (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(row);
-  });
+/**
+ * GET /api/products/:id
+ */
+export const getProduct = async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM products WHERE id = $1`,
+      [req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
-const updateProduct = (req, res) => {
-  Product.update(req.params.id, req.body, (err) => {
-    if (err) return res.status(500).json({ message: err.message });
-    res.json({ message: "Updated successfully" });
-  });
-};
-
-const deleteProduct = (req, res) => {
-  Product.remove(req.params.id, (err) => {
-    if (err) return res.status(500).json({ message: err.message });
-    res.json({ message: "Deleted successfully" });
-  });
-};
-
-const getLatestProducts = (req, res) => {
-  Product.getLatest((err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+/**
+ * GET /api/products/latest
+ */
+export const getLatestProducts = async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM products WHERE status='approved' ORDER BY created_at DESC LIMIT 4`
+    );
     res.json(rows);
-  });
-};
-
-module.exports = {
-  listProducts,
-  getProduct,
-  submitProduct,
-  getLatestProducts,
-  updateProduct,
-  deleteProduct
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };

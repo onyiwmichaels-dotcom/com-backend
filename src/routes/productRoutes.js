@@ -1,11 +1,14 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const {
+
+// ✅ Use import with curly braces for named exports from your controller
+// ⚠️ Note: You MUST include the '.js' extension for local files in ES Modules
+import {
   listProducts,
   getProduct,
   submitProduct,
   getLatestProducts
-} = require('../controllers/productController');
+} from '../controllers/productController.js';
 
 // GET Latest Products (Trending = Newest)
 router.get('/latest', getLatestProducts);
@@ -19,4 +22,5 @@ router.post('/', submitProduct);
 // GET Single Item
 router.get('/:id', getProduct);
 
-module.exports = router;
+// ✅ Change module.exports to export default
+export default router;

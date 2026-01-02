@@ -9,13 +9,14 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",  
   "dependencies": {
     "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "express-session": "^1.18.2",
     "multer": "^2.0.2",
+    "pg": "^8.16.3",
     "sqlite3": "^5.1.7"
   }
 }

@@ -1,4 +1,5 @@
-const express = require("express");
+import express from "express";
+
 const router = express.Router();
 
 const ADMIN_PIN = process.env.ADMIN_PIN || "WalterPIN2025";
@@ -16,4 +17,4 @@ router.post("/login", (req, res) => {
   return res.json({ success: true, message: "Login successful" });
 });
 
-module.exports = router;
+export default router;
