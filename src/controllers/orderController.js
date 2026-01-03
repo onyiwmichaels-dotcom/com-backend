@@ -41,12 +41,22 @@ export const createOrder = async (req, res) => {
 export const getOrders = async (req, res) => {
   try {
     const query = `
-      SELECT *
-      FROM orders
-      ORDER BY date DESC
+      SELECT
+        o.id,
+        o.customername,
+        o.phone,
+        o.location,
+        o.created_at,
+        p.name AS productname,
+        p.price AS productprice
+      FROM orders o
+      LEFT JOIN products p ON o.productid = p.id
+      ORDER BY o.created_at DESC
     `;
+
     const { rows } = await pool.query(query);
-     console.log("📦 ORDERS FROM DATABASE:", orders);
+
+    console.log("📦 ORDERS FROM DATABASE:", rows);
 
     res.json(rows);
   } catch (err) {
