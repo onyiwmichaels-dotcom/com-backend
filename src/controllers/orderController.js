@@ -46,7 +46,7 @@ export const getOrders = async (req, res) => {
       ORDER BY date DESC
     `;
     const { rows } = await pool.query(query);
-    console.log(rows);
+     console.log("📦 ORDERS FROM DATABASE:", orders);
 
     res.json(rows);
   } catch (err) {
