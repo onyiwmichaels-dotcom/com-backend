@@ -43,12 +43,12 @@ export const getOrders = async (req, res) => {
     const query = `
       SELECT
         o.id,
-        o.customername,
+        o.customername AS "customerName",
         o.phone,
         o.location,
-        o.created_at,
-        p.name AS productname,
-        p.price AS productprice
+        o.created_at AS "date",
+        p.name AS "productName",
+        p.price AS "productPrice"
       FROM orders o
       LEFT JOIN products p ON o.productid = p.id
       ORDER BY o.created_at DESC
@@ -56,7 +56,7 @@ export const getOrders = async (req, res) => {
 
     const { rows } = await pool.query(query);
 
-    console.log("📦 ORDERS FROM DATABASE:", rows);
+    console.log("📦 ADMIN ORDERS API RESPONSE:", rows);
 
     res.json(rows);
   } catch (err) {
@@ -64,3 +64,4 @@ export const getOrders = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
