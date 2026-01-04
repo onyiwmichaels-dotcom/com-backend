@@ -131,6 +131,21 @@ console.log("📸 IMAGE PREVIEW:", req.body.image?.substring(0, 50));
     res.status(500).json({ message: err.message });
   }
 };
+/**
+ * GET /api/products/:id
+ */
+export const getProduct = async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM products WHERE id = $1`,
+      [req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 
 /**
  * GET /api/products/latest
