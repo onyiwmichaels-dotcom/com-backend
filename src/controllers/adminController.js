@@ -1,5 +1,7 @@
 import pool from "../config/db.js";
-import path from "path";
+import { supabase } from "../config/supabase.js";
+import crypto from "crypto";
+
 
 // ==========================================================
 // 1. PRODUCT CRUD HANDLERS (ADMIN)
@@ -24,7 +26,7 @@ export const addProduct = async (req, res) => {
       name,
       price,
       description,
-      image,
+      image, // base64 string
       type,
       category,
       sellerPhone,
@@ -33,9 +35,33 @@ export const addProduct = async (req, res) => {
 
     if (!name || !price || !image || !sellerPhone) {
       return res.status(400).json({
-        message: "Name, price, image URL, and seller phone number are required."
+        message: "Name, price, image, and seller phone are required."
       });
     }
+
+    /* -------- SUPABASE IMAGE UPLOAD -------- */
+
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+
+    const fileName = `admin-${crypto.randomUUID()}.jpg`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("product-images")
+      .upload(fileName, buffer, {
+        contentType: "image/jpeg",
+        upsert: false
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from("product-images")
+      .getPublicUrl(fileName);
+
+    const imageUrl = data.publicUrl;
+
+    /* -------- DATABASE INSERT -------- */
 
     const query = `
       INSERT INTO products
@@ -48,7 +74,7 @@ export const addProduct = async (req, res) => {
       name,
       price,
       description,
-      image,
+      imageUrl,
       type,
       category,
       sellerPhone,
@@ -61,8 +87,9 @@ export const addProduct = async (req, res) => {
       message: "Product added and is live!",
       id: rows[0].id
     });
+
   } catch (err) {
-    console.error("❌ Admin Insert Error:", err.message);
+    console.error("❌ Admin Supabase Upload Error:", err.message);
     res.status(500).json({ message: err.message });
   }
 };
@@ -114,28 +141,61 @@ export const updateProduct = async (req, res) => {
   }
 };
 
-// DELETE Product
+
+// DELETE Product + Supabase Image
 export const deleteProduct = async (req, res) => {
   try {
-    const id = req.params.id;
-    if (!id) return res.status(400).json({ message: "ID required" });
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "Product ID required" });
+    }
 
+    // 1️⃣ Fetch image URL
+    const result = await pool.query(
+      `SELECT image FROM products WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const imageUrl = result.rows[0].image;
+
+    // 2️⃣ Extract Supabase file path
+    const filePath = imageUrl?.split("/product-images/")[1];
+
+    // 3️⃣ Delete image from Supabase
+    if (filePath) {
+      const { error: storageError } = await supabase.storage
+        .from("product-images")
+        .remove([filePath]);
+
+      if (storageError) {
+        console.error("❌ Supabase Image Delete Error:", storageError.message);
+        return res.status(500).json({
+          message: "Failed to delete product image"
+        });
+      }
+    }
+
+    // 4️⃣ Delete product record
     await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
-    res.status(204).send();
+
+    res.json({ message: "Product and image deleted successfully" });
+
   } catch (err) {
+    console.error("❌ Delete Product Error:", err.message);
     res.status(500).json({ message: err.message });
   }
 };
+
 
 // ==========================================================
 // 2. IMAGE UPLOAD HANDLER (UNCHANGED)
 // ==========================================================
 
-export const uploadImage = (req, res) => {
-  if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-  const filePath = `/uploads/${req.file.filename}`;
-  res.json({ filePath });
-};
+
 
 // ==========================================================
 // 3. ORDER HANDLERS
