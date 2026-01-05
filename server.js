@@ -1,5 +1,5 @@
 import express from 'express';
-import bodyParser from 'body-parser';
+
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -62,8 +62,8 @@ app.use(cors({
 }));
 
 // ✅ BODY PARSER FIX
-app.use(express.json()); 
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' })); // Increased limit for base64 images
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ✅ STATIC FILES
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -71,6 +71,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // ✅ DEBUG LOGGING
 app.use((req, res, next) => {
   console.log(`📢 Request received: [${req.method}] ${req.path}`);
+   if (req.method !== "POST")
   console.log('   Data:', req.body); // Shows what data arrived
   next();
 });
